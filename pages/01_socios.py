@@ -64,8 +64,11 @@ except:
 if not df_socios.empty:
     mostrar_saldos = st.toggle("👁️ Mostrar saldos", value=False)
     df_tabla = df_socios.copy()
+    
     df_tabla['Estado'] = df_tabla['Activo'].apply(lambda x: '🟢 Activo' if x == 1 else '🔴 Inactivo')
-    df_tabla['Saldo'] = df_tabla['Saldo'].apply(lambda x: f"${x:,.2f}" if mostrar_saldos else "******")
+    df_tabla['Al Día'] = df_tabla['Saldo'].apply(lambda x: 'Sí' if float(x) >= 0 else 'No')
+    df_tabla['Saldo'] = df_tabla['Saldo'].apply(lambda x: f"${float(x):,.2f}" if mostrar_saldos else "******")
+    
     st.dataframe(df_tabla.drop(columns=['Activo', 'IdPlan'], errors='ignore'), use_container_width=True, hide_index=True)
 
     # --- SELECCIÓN Y BOTÓN ---
@@ -106,3 +109,8 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar:
             conn.commit()
             st.session_state.mostrar_editor = False
             st.rerun()
+            
+    # Botón de cierre añadido
+    if st.button("❌ Cancelar / Cerrar Editor"):
+        st.session_state.mostrar_editor = False
+        st.rerun()
