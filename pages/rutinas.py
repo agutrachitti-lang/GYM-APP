@@ -11,7 +11,6 @@ bloques_entrenamiento = ["E.C."] + [f"B{i}" for i in range(1, 21)] + ["Finisher"
 
 tab_general, tab_excepcion, tab_ejercicios = st.tabs(["📅 Pizarra General", "👤 Excepciones", "📚 Catálogo"])
 
-# --- FUNCION DE ORDENAMIENTO (para evitar SQL Server functions) ---
 def ordenar_bloques(df):
     orden = {b: i for i, b in enumerate(bloques_entrenamiento)}
     df['Orden'] = df['Bloque'].map(orden).fillna(99)
@@ -32,16 +31,19 @@ with tab_ejercicios:
                     conn.commit()
                     st.rerun()
     with col_ej2:
-        df_ej = pd.read_sql("SELECT * FROM Ejercicios ORDER BY Nombre", conn)
-        st.dataframe(df_ej, use_container_width=True)
+        try:
+            df_ej = pd.read_sql("SELECT * FROM Ejercicios ORDER BY Nombre", conn)
+            st.dataframe(df_ej, use_container_width=True)
+        except:
+            st.info("Cargá ejercicios para empezar.")
+            df_ej = pd.DataFrame()
 
 # ==========================================
 # PESTAÑA 1: PIZARRA GENERAL
 # ==========================================
 with tab_general:
-    df_ej = pd.read_sql("SELECT * FROM Ejercicios", conn)
     if df_ej.empty:
-        st.warning("Cargá ejercicios primero.")
+        st.warning("Primero cargá ejercicios en la pestaña Catálogo.")
     else:
         dia_sel = st.selectbox("Seleccionar Día:", dias_semana)
         col_form, col_lista = st.columns([1, 2])
@@ -61,16 +63,10 @@ with tab_general:
                 st.rerun()
 
         with col_lista:
-            df_gen = pd.read_sql("SELECT RG.*, E.Nombre as Ejercicio FROM Rutina_General RG JOIN Ejercicios E ON RG.IdEjercicio=E.IdEjercicio WHERE DiaSemana=?", conn, params=(dia_sel,))
-            if not df_gen.empty:
-                df_gen = ordenar_bloques(df_gen)
-                st.dataframe(df_gen[['Bloque', 'Ejercicio', 'Repeticiones', 'Detalle']], hide_index=True)
-
-# ==========================================
-# PESTAÑA 2: EXCEPCIONES
-# ==========================================
-with tab_excepcion:
-    df_socios = pd.read_sql("SELECT IdSocio, Nombre, Apellido FROM Socios WHERE Activo=1", conn)
-    if not df_socios.empty:
-        socio_sel = st.selectbox("Alumno", df_socios.apply(lambda r: f"{r['IdSocio']} - {r['Nombre']} {r['Apellido']}", axis=1))
-        # ... lógica similar a la de arriba ...
+            try:
+                df_gen = pd.read_sql("SELECT RG.*, E.Nombre as Ejercicio FROM Rutina_General RG JOIN Ejercicios E ON RG.IdEjercicio=E.IdEjercicio WHERE DiaSemana=?", conn, params=(dia_sel,))
+                if not df_gen.empty:
+                    df_gen = ordenar_bloques(df_gen)
+                    st.dataframe(df_gen[['Bloque', 'Ejercicio', 'Repeticiones', 'Detalle']], hide_index=True)
+            except:
+                st.info("Pizarra en blanco.")
