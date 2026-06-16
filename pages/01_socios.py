@@ -93,16 +93,21 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar:
     col_e, col_d = st.columns(2)
     with col_e:
         with st.form("form_editar"):
+            nuevo_estado = st.checkbox("🟢 Socio Activo", value=bool(s['Activo']))
             n = st.text_input("Nombre", value=s['Nombre'])
             a = st.text_input("Apellido", value=s['Apellido'])
             d = st.text_input("DNI", value=s['DNI'])
             sald = st.number_input("Saldo", value=float(s['Saldo']))
+            
             if st.form_submit_button("Guardar Cambios"):
+                estado_bit = 1 if nuevo_estado else 0
                 cursor = conn.cursor()
-                cursor.execute("UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, Saldo=? WHERE IdSocio=?", (n, a, d, sald, s['IdSocio']))
+                cursor.execute("UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, Saldo=?, Activo=? WHERE IdSocio=?", 
+                               (n, a, d, sald, estado_bit, s['IdSocio']))
                 conn.commit()
                 st.session_state.mostrar_editor = False
                 st.rerun()
+                
     with col_d:
         if st.button("🗑️ Eliminar Socio Definitivamente"):
             conn.cursor().execute("DELETE FROM Socios WHERE IdSocio=?", (s['IdSocio'],))
@@ -110,7 +115,6 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar:
             st.session_state.mostrar_editor = False
             st.rerun()
             
-    # Botón de cierre añadido
-    if st.button("❌ Cancelar / Cerrar Editor"):
-        st.session_state.mostrar_editor = False
-        st.rerun()
+        if st.button("❌ Cancelar / Cerrar Editor"):
+            st.session_state.mostrar_editor = False
+            st.rerun()
