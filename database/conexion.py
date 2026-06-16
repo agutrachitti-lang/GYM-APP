@@ -1,8 +1,10 @@
 import sqlite3
 
 def get_connection():
+    # Esto conecta a tu base de datos
     conn = sqlite3.connect('gym.db', check_same_thread=False)
-    # Creamos las tablas si no existen para evitar el error de "no encuentra la tabla"
+    
+    # Esto crea las tablas si no existen, para que no dé error
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Ejercicios (
@@ -19,8 +21,7 @@ def get_connection():
             Repeticiones TEXT,
             Detalle TEXT,
             VideoUrl TEXT,
-            TecnicaNota TEXT,
-            FOREIGN KEY(IdEjercicio) REFERENCES Ejercicios(IdEjercicio)
+            TecnicaNota TEXT
         )
     """)
     conn.commit()
