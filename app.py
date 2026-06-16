@@ -1,3 +1,14 @@
 import streamlit as st
-st.title("¡Hola! La App está funcionando")
-st.write("Si ves esto, el código ya no está roto.")
+from database.conexion import get_connection
+
+st.title("Sistema Administrativo")
+conn = get_connection()
+
+try:
+    # Probamos si la base de datos responde
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tablas = cursor.fetchall()
+    st.write("Conexión exitosa. Tablas detectadas:", tablas)
+except Exception as e:
+    st.error(f"Error de base de datos: {e}")
