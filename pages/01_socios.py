@@ -92,23 +92,33 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar:
     
     col_e, col_d = st.columns(2)
     with col_e:
+        # Usamos un formulario limpio
         with st.form("form_editar"):
-            nuevo_estado = st.checkbox("🟢 Socio Activo", value=bool(s['Activo']))
+            # Traemos el valor actual de Activo (1 o 0)
+            es_activo = bool(s['Activo'])
+            nuevo_estado = st.checkbox("🟢 Socio Activo", value=es_activo)
+            
             n = st.text_input("Nombre", value=s['Nombre'])
             a = st.text_input("Apellido", value=s['Apellido'])
             d = st.text_input("DNI", value=s['DNI'])
             sald = st.number_input("Saldo", value=float(s['Saldo']))
             
             if st.form_submit_button("Guardar Cambios"):
+                # Convertimos el checkbox a 1 o 0 explícitamente
                 estado_bit = 1 if nuevo_estado else 0
+                
                 cursor = conn.cursor()
-                cursor.execute("UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, Saldo=?, Activo=? WHERE IdSocio=?", 
-                               (n, a, d, sald, estado_bit, s['IdSocio']))
+                cursor.execute("""
+                    UPDATE Socios 
+                    SET Nombre=?, Apellido=?, DNI=?, Saldo=?, Activo=? 
+                    WHERE IdSocio=?
+                """, (n, a, d, sald, estado_bit, s['IdSocio']))
                 conn.commit()
                 st.session_state.mostrar_editor = False
                 st.rerun()
                 
     with col_d:
+        st.write("### Acciones")
         if st.button("🗑️ Eliminar Socio Definitivamente"):
             conn.cursor().execute("DELETE FROM Socios WHERE IdSocio=?", (s['IdSocio'],))
             conn.commit()
