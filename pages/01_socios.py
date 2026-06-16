@@ -46,7 +46,7 @@ with st.form("form_nuevo_socio", clear_on_submit=True):
         if nombre and apellido and dni and dict_planes:
             cursor = conn.cursor()
             cursor.execute("INSERT INTO Socios (Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,1)",
-                           (nombre.strip().title(), apellido.strip().title(), dni, dict_planes[plan_elegido]['IdPlan'], fecha_alta, fecha_vencimiento, -float(dict_planes[plan_elegido]['Precio'])))
+                           (nombre.strip().title(), apellido.strip().title(), dni, dict_planes[plan_elegido]['IdPlan'], fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -float(dict_planes[plan_elegido]['Precio'])))
             conn.commit()
             st.rerun()
 
@@ -67,15 +67,18 @@ if not df_socios.empty:
     
     df_tabla['Estado'] = df_tabla['Activo'].apply(lambda x: '🟢 Activo' if x == 1 else '🔴 Inactivo')
     df_tabla['Al Día'] = df_tabla['Saldo'].apply(lambda x: 'Sí' if float(x) >= 0 else 'No')
-    df_tabla['Saldo'] = df_tabla['Saldo'].apply(lambda x: f"${float(x):,.2f}" if mostrar_saldos else "******")
+    df_tabla['Saldo_Display'] = df_tabla['Saldo'].apply(lambda x: f"${float(x):,.2f}" if mostrar_saldos else "******")
     
-    st.dataframe(df_tabla.drop(columns=['Activo', 'IdPlan'], errors='ignore'), use_container_width=True, hide_index=True)
+    # Mostramos la tabla (ocultamos columnas técnicas)
+    st.dataframe(df_tabla.drop(columns=['Activo', 'IdPlan', 'Saldo'], errors='ignore').rename(columns={'Saldo_Display': 'Saldo'}), use_container_width=True, hide_index=True)
 
-    # --- SELECCIÓN Y BOTÓN ---
+    # --- SELECCIÓN Y BOTÓN DE GESTIÓN ---
+    st.write("---")
     opciones = df_socios.apply(lambda r: f"{r['IdSocio']} - {r['Nombre']} {r['Apellido']}", axis=1).tolist()
     socio_sel = st.selectbox("Seleccionar para gestionar:", opciones, key="sel_gestionar")
     
-    if st.button("🔧 Modificar / Eliminar", type="primary"):
+    # BOTÓN FUERA DEL FORMULARIO Y DE COLUMNAS PARA MÁXIMA ESTABILIDAD
+    if st.button("🔧 Modificar / Eliminar seleccionado", type="primary"):
         st.session_state.mostrar_editor = True
         st.session_state.id_socio_a_editar = int(socio_sel.split(" - ")[0])
         st.rerun()
@@ -92,39 +95,27 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar:
     
     col_e, col_d = st.columns(2)
     with col_e:
-        # Usamos un formulario limpio
         with st.form("form_editar"):
-            # Traemos el valor actual de Activo (1 o 0)
-            es_activo = bool(s['Activo'])
-            nuevo_estado = st.checkbox("🟢 Socio Activo", value=es_activo)
-            
+            nuevo_estado = st.checkbox("🟢 Socio Activo", value=bool(s['Activo']))
             n = st.text_input("Nombre", value=s['Nombre'])
             a = st.text_input("Apellido", value=s['Apellido'])
             d = st.text_input("DNI", value=s['DNI'])
             sald = st.number_input("Saldo", value=float(s['Saldo']))
             
             if st.form_submit_button("Guardar Cambios"):
-                # Convertimos el checkbox a 1 o 0 explícitamente
                 estado_bit = 1 if nuevo_estado else 0
-                
                 cursor = conn.cursor()
-                cursor.execute("""
-                    UPDATE Socios 
-                    SET Nombre=?, Apellido=?, DNI=?, Saldo=?, Activo=? 
-                    WHERE IdSocio=?
-                """, (n, a, d, sald, estado_bit, s['IdSocio']))
+                cursor.execute("UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, Saldo=?, Activo=? WHERE IdSocio=?", 
+                               (n, a, d, sald, estado_bit, s['IdSocio']))
                 conn.commit()
                 st.session_state.mostrar_editor = False
                 st.rerun()
-                
     with col_d:
-        st.write("### Acciones")
         if st.button("🗑️ Eliminar Socio Definitivamente"):
             conn.cursor().execute("DELETE FROM Socios WHERE IdSocio=?", (s['IdSocio'],))
             conn.commit()
             st.session_state.mostrar_editor = False
             st.rerun()
-            
         if st.button("❌ Cancelar / Cerrar Editor"):
             st.session_state.mostrar_editor = False
             st.rerun()
