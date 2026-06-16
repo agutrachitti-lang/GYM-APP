@@ -1,0 +1,15 @@
+import streamlit as st
+import pandas as pd
+from database.connection import get_connection
+
+st.set_page_config(page_title="Gestión de Socios", layout="wide")
+
+st.title("Socios del Gimnasio")
+
+# Traer datos
+conn = get_connection()
+query = "SELECT IdSocio, Nombre, PlanSuscripcion, FechaVencimiento FROM Socios"
+df_socios = pd.read_sql(query, conn)
+
+# Mostrar en tabla
+st.dataframe(df_socios, use_container_width=True, hide_index=True)
