@@ -1,13 +1,14 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
 from database.conexion import get_connection
 
-st.set_page_config(page_title="Gestión de Socios", layout="wide")
-st.title("Socios del Gimnasio")
-
 conn = get_connection()
+
+if conn is None:
+    st.error("Error al conectar con la base de datos.")
+    st.stop() # Esto detiene la App y evita que salgan los carteles rojos
+
+# ... el resto de tu código ...
 
 # --- COMIENZO: CONTROL DEL ESTADO DEL EDITOR ---
 if "mostrar_editor" not in st.session_state:
