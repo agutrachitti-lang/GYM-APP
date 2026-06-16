@@ -123,9 +123,26 @@ else:
     st.info("No hay socios registrados aún.")
 
 # ==========================================
-# 3. EDITOR (SÓLO SI SE ACTIVA)
+# 3. SELECCIÓN Y BOTÓN DE APERTURA (REEMPLAZAR ESTO)
 # ==========================================
-if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar:
-    # (Aquí va el resto del código del editor que ya tenías, 
-    # pero asegúrate de usar siempre bloques try/except para las queries)
-    pass
+if not df_mostrar.empty:
+    st.write("---")
+    # Usamos una sola columna para el selectbox y el botón
+    col_sel, col_btn = st.columns([3, 1])
+    
+    with col_sel:
+        # Creamos una lista de opciones clara
+        lista_opciones = df_mostrar.apply(
+            lambda x: f"{x['IdSocio']} - {x['Nombre']} {x['Apellido']}", axis=1
+        ).tolist()
+        socio_sel = st.selectbox("Seleccionar socio para gestionar:", lista_opciones)
+    
+    with col_btn:
+        st.write("") # Espacio para alinear
+        st.write("") 
+        # IMPORTANTE: Este botón está fuera de cualquier form
+        if st.button("🔧 Modificar / Eliminar", type="primary", use_container_width=True):
+            id_seleccionado = int(socio_sel.split(" - ")[0])
+            st.session_state.mostrar_editor = True
+            st.session_state.id_socio_a_editar = id_seleccionado
+            st.rerun()
