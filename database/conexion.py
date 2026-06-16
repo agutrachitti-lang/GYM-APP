@@ -1,11 +1,11 @@
 import sqlite3
 
 def get_connection():
-    # Esto conecta a tu base de datos
+    # Conecta al archivo gym.db
     conn = sqlite3.connect('gym.db', check_same_thread=False)
-    
-    # Esto crea las tablas si no existen, para que no dé error
     cursor = conn.cursor()
+    
+    # ESTO CREA LAS TABLAS SI NO EXISTEN
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Ejercicios (
             IdEjercicio INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -24,5 +24,7 @@ def get_connection():
             TecnicaNota TEXT
         )
     """)
+    # Si tenés más tablas (como 'Socios' o 'Pagos'), agregalas acá abajo de la misma forma
+    
     conn.commit()
     return conn
