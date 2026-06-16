@@ -17,7 +17,11 @@ if "id_socio_a_editar" not in st.session_state:
 
 # --- TRAER LOS PLANES DISPONIBLES DESDE SQL ---
 query_planes = "SELECT IdPlan, NombrePlan, DuracionMeses, Precio FROM Planes"
-df_planes = pd.read_sql(query_planes, conn)
+try:
+    df_planes = pd.read_sql(query_planes, conn)
+except:
+    st.warning("No hay datos cargados en esta tabla todavía.")
+    df_planes = pd.DataFrame() # Esto crea una tabla vacía en memoria para que no tire error
 dict_planes = {row['NombrePlan']: row for index, row in df_planes.iterrows()}
 
 # ==========================================
