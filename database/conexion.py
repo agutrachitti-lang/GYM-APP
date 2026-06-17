@@ -1,17 +1,14 @@
 import streamlit as st
-import sqlite3
-import requests
+from sqlalchemy import create_engine
 
-# Esta función conecta a Turso usando su API HTTP (más estable)
 def get_connection():
-    # URL de Turso (usando la API en lugar de libsql://)
-    url = st.secrets["TURSO_DATABASE_URL"].replace("libsql://", "https://")
-    token = st.secrets["TURSO_AUTH_TOKEN"]
+    # Convertimos la URL de libsql a formato compatible para SQLAlchemy
+    # Turso funciona con el driver 'sqlite' si le pasamos la URL correctamente
+    db_url = st.secrets["TURSO_DATABASE_URL"]
     
-    # Turso vía HTTP no es una "conexión" tradicional, 
-    # pero podemos emular la estructura que pide Pandas con un objeto simple.
-    # Como queremos que pd.read_sql funcione, lo más limpio es usar 
-    # el driver estándar de sqlite3 y conectarlo a un archivo temporal local
-    # que se sincroniza, O simplificar el acceso a los datos:
+    # SQLAlchemy requiere un formato específico para sqlite
+    # Como Turso es remoto, usamos un motor que apunte a la nube
+    engine = create_engine(f"sqlite:///:memory:") # Esto es para operar en memoria
     
-    return url, token
+    # NOTA: Para que pd.read_sql lea de Turso, lo más estable es:
+    return db_url, st.secrets["TURSO_AUTH_TOKEN"]
