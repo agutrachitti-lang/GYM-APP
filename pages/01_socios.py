@@ -31,7 +31,7 @@ with st.container(border=True):
     st.subheader("Agregar Nuevo Socio")
     col1, col2 = st.columns(2)
     with col1:
-        # Usamos una key dinámica que cambia cuando guardamos
+        # Usamos una key dinámica que cambia cuando guardamos para vaciar los campos
         nombre = st.text_input("Nombre", key=f"alta_nom_{st.session_state.alta_key}")
         apellido = st.text_input("Apellido", key=f"alta_ape_{st.session_state.alta_key}")
     with col2:
@@ -49,11 +49,19 @@ with st.container(border=True):
     if st.button("Guardar Socio", type="primary"):
         if nombre and apellido and dni and dict_planes:
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO Socios (Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,1)",
-                           (nombre.strip().title(), apellido.strip().title(), dni, dict_planes[plan_elegido]['IdPlan'], fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -float(dict_planes[plan_elegido]['Precio'])))
+            
+            # --- SOLUCIÓN BALA DE PLATA PARA EL ID ---
+            # Buscamos el ID más alto y le sumamos 1 manualmente
+            cursor.execute("SELECT MAX(IdSocio) FROM Socios")
+            max_id = cursor.fetchone()[0]
+            nuevo_id = 1 if max_id is None else max_id + 1
+            
+            # Insertamos usando el nuevo_id generado
+            cursor.execute("INSERT INTO Socios (IdSocio, Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,?,1)",
+                           (nuevo_id, nombre.strip().title(), apellido.strip().title(), dni, dict_planes[plan_elegido]['IdPlan'], fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -float(dict_planes[plan_elegido]['Precio'])))
             conn.commit()
             
-            # Sumamos 1 a la key, lo que resetea todos los campos de texto
+            # Sumamos 1 a la key, lo que resetea todos los campos de texto sin romper Streamlit
             st.session_state.alta_key += 1
             st.success("Socio guardado correctamente.")
             st.rerun()
@@ -72,6 +80,11 @@ except:
     df_socios = pd.DataFrame()
 
 if not df_socios.empty:
+    
+    # --- ESCUDO CONTRA EL ERROR 'nan' ---
+    # Forzamos a que cualquier ID roto (None/NaN) se convierta en un 0. Así podés seleccionarlo y borrarlo.
+    df_socios['IdSocio'] = pd.to_numeric(df_socios['IdSocio'], errors='coerce').fillna(0).astype(int)
+    
     mostrar_saldos = st.toggle("👁️ Mostrar saldos", value=False)
     df_tabla = df_socios.copy()
     
@@ -101,49 +114,55 @@ else:
 # ==========================================
 # 3. PANEL DE EDICIÓN
 # ==========================================
-if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar:
-    s = df_socios[df_socios['IdSocio'] == st.session_state.id_socio_a_editar].iloc[0]
-    st.write("---")
-    st.info(f"⚙️ Editando a: {s['Nombre']} {s['Apellido']}")
+if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not None:
+    # Filtramos con seguridad por si no encuentra el ID
+    socios_filtrados = df_socios[df_socios['IdSocio'] == st.session_state.id_socio_a_editar]
     
-    col_e, col_d = st.columns(2)
-    with col_e:
-        with st.form("form_editar"):
-            # Lógica robusta: etiqueta estática para que Streamlit no pierda el valor al destildar
-            es_activo = True if str(s['Activo']).strip() in ['1', '1.0'] else False
-            nuevo_estado = st.checkbox("🟢 Mantener como Socio Activo (Destildar para Inactivo)", value=es_activo)
-            
-            n = st.text_input("Nombre", value=s['Nombre'])
-            a = st.text_input("Apellido", value=s['Apellido'])
-            d = st.text_input("DNI", value=s['DNI'])
-            
-            lista_nombres_planes = list(dict_planes.keys()) if dict_planes else ["Sin planes"]
-            nombre_plan_actual = s.get('NombrePlan', '')
-            index_plan = lista_nombres_planes.index(nombre_plan_actual) if nombre_plan_actual in lista_nombres_planes else 0
-            nuevo_plan = st.selectbox("Plan", lista_nombres_planes, index=index_plan)
-            
-            sald = st.number_input("Saldo", value=float(s['Saldo']))
-            
-            if st.form_submit_button("Guardar Cambios"):
-                estado_bit = 1 if nuevo_estado else 0
-                nuevo_id_plan = int(dict_planes[nuevo_plan]['IdPlan']) if dict_planes else s['IdPlan']
+    if not socios_filtrados.empty:
+        s = socios_filtrados.iloc[0]
+        st.write("---")
+        st.info(f"⚙️ Editando a: {s['Nombre']} {s['Apellido']}")
+        
+        col_e, col_d = st.columns(2)
+        with col_e:
+            with st.form("form_editar"):
+                es_activo = True if str(s['Activo']).strip() in ['1', '1.0'] else False
+                nuevo_estado = st.checkbox("🟢 Mantener como Socio Activo (Destildar para Inactivo)", value=es_activo)
                 
-                cursor = conn.cursor()
-                cursor.execute("UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, IdPlan=?, Saldo=?, Activo=? WHERE IdSocio=?", 
-                               (n, a, d, nuevo_id_plan, sald, estado_bit, int(s['IdSocio'])))
-                conn.commit()
+                n = st.text_input("Nombre", value=s['Nombre'])
+                a = st.text_input("Apellido", value=s['Apellido'])
+                d = st.text_input("DNI", value=s['DNI'])
+                
+                lista_nombres_planes = list(dict_planes.keys()) if dict_planes else ["Sin planes"]
+                nombre_plan_actual = s.get('NombrePlan', '')
+                index_plan = lista_nombres_planes.index(nombre_plan_actual) if nombre_plan_actual in lista_nombres_planes else 0
+                nuevo_plan = st.selectbox("Plan", lista_nombres_planes, index=index_plan)
+                
+                sald = st.number_input("Saldo", value=float(s['Saldo']))
+                
+                if st.form_submit_button("Guardar Cambios"):
+                    estado_bit = 1 if nuevo_estado else 0
+                    nuevo_id_plan = int(dict_planes[nuevo_plan]['IdPlan']) if dict_planes else s['IdPlan']
+                    
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, IdPlan=?, Saldo=?, Activo=? WHERE IdSocio=?", 
+                                   (n, a, d, nuevo_id_plan, sald, estado_bit, int(s['IdSocio'])))
+                    conn.commit()
+                    st.session_state.mostrar_editor = False
+                    st.rerun()
+                    
+        with col_d:
+            with st.expander("🗑️ Eliminar Socio Definitivamente"):
+                st.warning("¿Estás seguro? Esta acción borrará al socio del sistema.")
+                if st.button("Sí, borrar socio", type="primary"):
+                    conn.cursor().execute("DELETE FROM Socios WHERE IdSocio=?", (int(s['IdSocio']),))
+                    conn.commit()
+                    st.session_state.mostrar_editor = False
+                    st.rerun()
+                    
+            if st.button("❌ Cancelar / Cerrar Editor"):
                 st.session_state.mostrar_editor = False
                 st.rerun()
-                
-    with col_d:
-        with st.expander("🗑️ Eliminar Socio Definitivamente"):
-            st.warning("¿Estás seguro? Esta acción borrará al socio del sistema.")
-            if st.button("Sí, borrar socio", type="primary"):
-                conn.cursor().execute("DELETE FROM Socios WHERE IdSocio=?", (int(s['IdSocio']),))
-                conn.commit()
-                st.session_state.mostrar_editor = False
-                st.rerun()
-                
-        if st.button("❌ Cancelar / Cerrar Editor"):
-            st.session_state.mostrar_editor = False
-            st.rerun()
+    else:
+        st.error("Socio no encontrado. Por favor, recargá la página.")
+        st.session_state.mostrar_editor = False
