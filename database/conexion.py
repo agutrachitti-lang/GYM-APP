@@ -1,13 +1,17 @@
 import streamlit as st
-import libsql_experimental as sqlite3
+import sqlite3
+import requests
 
+# Esta función conecta a Turso usando su API HTTP (más estable)
 def get_connection():
-    # URL y Token directos para probar
-    db_url = "libsql://gymdb-agutrachitti-lang.aws-us-east-1.turso.io"
-    auth_token = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODE3MTkyNDEsImlkIjoiMDE5ZWQ2YmMtNzAwMS03MzEzLTllOGYtNzcyMjE2NTU3ZmU0IiwicmlkIjoiMTVlNjFkYzUtMGQzYS00ODc1LTg3OWQtMTA0OTMyOTU0ZGZkIn0.Q-6OhbsrqfuHz4ROTrpNVZXNTfCKQM1Jl9FykIsVSVsb2LVyoTY23n6zsoA95GhSS0HAEPkeMZJAdfcMg3deDw"
+    # URL de Turso (usando la API en lugar de libsql://)
+    url = st.secrets["TURSO_DATABASE_URL"].replace("libsql://", "https://")
+    token = st.secrets["TURSO_AUTH_TOKEN"]
     
-    # Intentamos conectar
-    conn = sqlite3.connect(database=db_url, auth_token=auth_token, sync_url=db_url)
-    conn.check_same_thread = False
+    # Turso vía HTTP no es una "conexión" tradicional, 
+    # pero podemos emular la estructura que pide Pandas con un objeto simple.
+    # Como queremos que pd.read_sql funcione, lo más limpio es usar 
+    # el driver estándar de sqlite3 y conectarlo a un archivo temporal local
+    # que se sincroniza, O simplificar el acceso a los datos:
     
-    return conn
+    return url, token
