@@ -23,31 +23,39 @@ except:
     dict_planes = {}
 
 # ==========================================
-# 1. FORMULARIO DE ALTA
+# 1. FORMULARIO DE ALTA (Sin st.form para que sea dinámico)
 # ==========================================
-with st.form("form_nuevo_socio", clear_on_submit=True):
+with st.container(border=True):
     st.subheader("Agregar Nuevo Socio")
     col1, col2 = st.columns(2)
     with col1:
-        nombre = st.text_input("Nombre")
-        apellido = st.text_input("Apellido")
+        # Usamos keys para poder limpiar los campos después de guardar
+        nombre = st.text_input("Nombre", key="alta_nom")
+        apellido = st.text_input("Apellido", key="alta_ape")
     with col2:
-        dni = st.text_input("DNI")
+        dni = st.text_input("DNI", key="alta_dni")
         plan_elegido = st.selectbox("Seleccionar Plan", list(dict_planes.keys()) if dict_planes else ["Sin planes"])
     
     fecha_alta = st.date_input("Fecha de Inicio / Pago", value=datetime.today().date())
     
+    # Al no estar en un form, esto se actualiza en tiempo real al cambiar el plan
     if dict_planes and plan_elegido in dict_planes:
         meses = int(dict_planes[plan_elegido]['DuracionMeses'])
         fecha_vencimiento = fecha_alta + relativedelta(months=meses)
         st.info(f"💰 Precio: ${dict_planes[plan_elegido]['Precio']:,.2f} | 📅 Vence el: {fecha_vencimiento.strftime('%d/%m/%Y')}")
 
-    if st.form_submit_button("Guardar Socio"):
+    if st.button("Guardar Socio", type="primary"):
         if nombre and apellido and dni and dict_planes:
             cursor = conn.cursor()
             cursor.execute("INSERT INTO Socios (Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,1)",
                            (nombre.strip().title(), apellido.strip().title(), dni, dict_planes[plan_elegido]['IdPlan'], fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -float(dict_planes[plan_elegido]['Precio'])))
             conn.commit()
+            
+            # Limpiamos los campos visuales reseteando el session_state
+            st.session_state['alta_nom'] = ""
+            st.session_state['alta_ape'] = ""
+            st.session_state['alta_dni'] = ""
+            
             st.rerun()
 
 st.divider()
@@ -65,19 +73,23 @@ if not df_socios.empty:
     mostrar_saldos = st.toggle("👁️ Mostrar saldos", value=False)
     df_tabla = df_socios.copy()
     
-    df_tabla['Estado'] = df_tabla['Activo'].apply(lambda x: '🟢 Activo' if x == 1 else '🔴 Inactivo')
+    # Aseguramos los formatos
+    df_tabla['Estado'] = df_tabla['Activo'].apply(lambda x: '🟢 Activo' if str(x).strip() in ['1', '1.0'] else '🔴 Inactivo')
     df_tabla['Al Día'] = df_tabla['Saldo'].apply(lambda x: 'Sí' if float(x) >= 0 else 'No')
     df_tabla['Saldo_Display'] = df_tabla['Saldo'].apply(lambda x: f"${float(x):,.2f}" if mostrar_saldos else "******")
     
-    # Mostramos la tabla (ocultamos columnas técnicas)
-    st.dataframe(df_tabla.drop(columns=['Activo', 'IdPlan', 'Saldo'], errors='ignore').rename(columns={'Saldo_Display': 'Saldo'}), use_container_width=True, hide_index=True)
+    # Reordenamos para que IdSocio sea la primera columna visible y eliminamos las técnicas
+    columnas_finales = ['IdSocio', 'Nombre', 'Apellido', 'DNI', 'NombrePlan', 'FechaAlta', 'FechaVencimiento', 'Estado', 'Al Día', 'Saldo_Display']
+    # Filtramos por las columnas que realmente existen (por seguridad)
+    columnas_finales = [col for col in columnas_finales if col in df_tabla.columns]
+    
+    st.dataframe(df_tabla[columnas_finales].rename(columns={'Saldo_Display': 'Saldo'}), use_container_width=True, hide_index=True)
 
     # --- SELECCIÓN Y BOTÓN DE GESTIÓN ---
     st.write("---")
     opciones = df_socios.apply(lambda r: f"{r['IdSocio']} - {r['Nombre']} {r['Apellido']}", axis=1).tolist()
     socio_sel = st.selectbox("Seleccionar para gestionar:", opciones, key="sel_gestionar")
     
-    # BOTÓN FUERA DEL FORMULARIO Y DE COLUMNAS PARA MÁXIMA ESTABILIDAD
     if st.button("🔧 Modificar / Eliminar seleccionado", type="primary"):
         st.session_state.mostrar_editor = True
         st.session_state.id_socio_a_editar = int(socio_sel.split(" - ")[0])
@@ -96,16 +108,14 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar:
     col_e, col_d = st.columns(2)
     with col_e:
         with st.form("form_editar"):
-            # Lógica robusta para detectar si está activo
-            es_activo = bool(s['Activo'] == 1)
-            etiqueta_estado = "🟢 Socio Activo" if es_activo else "🔴 Socio Inactivo"
-            nuevo_estado = st.checkbox(etiqueta_estado, value=es_activo)
+            # Lógica robusta: etiqueta estática para que Streamlit no pierda el valor al destildar
+            es_activo = True if str(s['Activo']).strip() in ['1', '1.0'] else False
+            nuevo_estado = st.checkbox("🟢 Mantener como Socio Activo (Destildar para Inactivo)", value=es_activo)
             
             n = st.text_input("Nombre", value=s['Nombre'])
             a = st.text_input("Apellido", value=s['Apellido'])
             d = st.text_input("DNI", value=s['DNI'])
             
-            # --- AGREGADO: Selección de Plan ---
             lista_nombres_planes = list(dict_planes.keys()) if dict_planes else ["Sin planes"]
             nombre_plan_actual = s.get('NombrePlan', '')
             index_plan = lista_nombres_planes.index(nombre_plan_actual) if nombre_plan_actual in lista_nombres_planes else 0
@@ -119,17 +129,16 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar:
                 
                 cursor = conn.cursor()
                 cursor.execute("UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, IdPlan=?, Saldo=?, Activo=? WHERE IdSocio=?", 
-                               (n, a, d, nuevo_id_plan, sald, estado_bit, s['IdSocio']))
+                               (n, a, d, nuevo_id_plan, sald, estado_bit, int(s['IdSocio'])))
                 conn.commit()
                 st.session_state.mostrar_editor = False
                 st.rerun()
                 
     with col_d:
-        # --- AGREGADO: Doble confirmación para eliminar ---
         with st.expander("🗑️ Eliminar Socio Definitivamente"):
             st.warning("¿Estás seguro? Esta acción borrará al socio del sistema.")
             if st.button("Sí, borrar socio", type="primary"):
-                conn.cursor().execute("DELETE FROM Socios WHERE IdSocio=?", (s['IdSocio'],))
+                conn.cursor().execute("DELETE FROM Socios WHERE IdSocio=?", (int(s['IdSocio']),))
                 conn.commit()
                 st.session_state.mostrar_editor = False
                 st.rerun()
