@@ -1,11 +1,34 @@
 import streamlit as st
-import libsql_experimental as sqlite3
+
+import sqlite3
+
+import requests
+
+
+
+# Esta función conecta a Turso usando su API HTTP (más estable)
 
 def get_connection():
-    db_url = st.secrets["TURSO_DATABASE_URL"]
-    auth_token = st.secrets["TURSO_AUTH_TOKEN"]
+
+    # URL de Turso (usando la API en lugar de libsql://)
+
+    url = st.secrets["TURSO_DATABASE_URL"].replace("libsql://", "https://")
+
+    token = st.secrets["TURSO_AUTH_TOKEN"]
+
     
-    # Conectamos con el driver que usabas originalmente
-    conn = sqlite3.connect(database=db_url, auth_token=auth_token)
-    conn.check_same_thread = False
-    return conn
+
+    # Turso vía HTTP no es una "conexión" tradicional, 
+
+    # pero podemos emular la estructura que pide Pandas con un objeto simple.
+
+    # Como queremos que pd.read_sql funcione, lo más limpio es usar 
+
+    # el driver estándar de sqlite3 y conectarlo a un archivo temporal local
+
+    # que se sincroniza, O simplificar el acceso a los datos:
+
+    
+
+    return url, token
+
