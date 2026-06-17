@@ -96,26 +96,44 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar:
     col_e, col_d = st.columns(2)
     with col_e:
         with st.form("form_editar"):
-            nuevo_estado = st.checkbox("🟢 Socio Activo", value=bool(s['Activo']))
+            # Lógica robusta para detectar si está activo
+            es_activo = bool(s['Activo'] == 1)
+            etiqueta_estado = "🟢 Socio Activo" if es_activo else "🔴 Socio Inactivo"
+            nuevo_estado = st.checkbox(etiqueta_estado, value=es_activo)
+            
             n = st.text_input("Nombre", value=s['Nombre'])
             a = st.text_input("Apellido", value=s['Apellido'])
             d = st.text_input("DNI", value=s['DNI'])
+            
+            # --- AGREGADO: Selección de Plan ---
+            lista_nombres_planes = list(dict_planes.keys()) if dict_planes else ["Sin planes"]
+            nombre_plan_actual = s.get('NombrePlan', '')
+            index_plan = lista_nombres_planes.index(nombre_plan_actual) if nombre_plan_actual in lista_nombres_planes else 0
+            nuevo_plan = st.selectbox("Plan", lista_nombres_planes, index=index_plan)
+            
             sald = st.number_input("Saldo", value=float(s['Saldo']))
             
             if st.form_submit_button("Guardar Cambios"):
                 estado_bit = 1 if nuevo_estado else 0
+                nuevo_id_plan = int(dict_planes[nuevo_plan]['IdPlan']) if dict_planes else s['IdPlan']
+                
                 cursor = conn.cursor()
-                cursor.execute("UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, Saldo=?, Activo=? WHERE IdSocio=?", 
-                               (n, a, d, sald, estado_bit, s['IdSocio']))
+                cursor.execute("UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, IdPlan=?, Saldo=?, Activo=? WHERE IdSocio=?", 
+                               (n, a, d, nuevo_id_plan, sald, estado_bit, s['IdSocio']))
                 conn.commit()
                 st.session_state.mostrar_editor = False
                 st.rerun()
+                
     with col_d:
-        if st.button("🗑️ Eliminar Socio Definitivamente"):
-            conn.cursor().execute("DELETE FROM Socios WHERE IdSocio=?", (s['IdSocio'],))
-            conn.commit()
-            st.session_state.mostrar_editor = False
-            st.rerun()
+        # --- AGREGADO: Doble confirmación para eliminar ---
+        with st.expander("🗑️ Eliminar Socio Definitivamente"):
+            st.warning("¿Estás seguro? Esta acción borrará al socio del sistema.")
+            if st.button("Sí, borrar socio", type="primary"):
+                conn.cursor().execute("DELETE FROM Socios WHERE IdSocio=?", (s['IdSocio'],))
+                conn.commit()
+                st.session_state.mostrar_editor = False
+                st.rerun()
+                
         if st.button("❌ Cancelar / Cerrar Editor"):
             st.session_state.mostrar_editor = False
             st.rerun()
