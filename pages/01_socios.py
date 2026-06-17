@@ -9,6 +9,13 @@ st.title("Socios del Gimnasio")
 
 conn = get_connection()
 
+try:
+    conn.execute("CREATE TABLE IF NOT EXISTS Planes (IdPlan INTEGER PRIMARY KEY AUTOINCREMENT, NombrePlan TEXT, DuracionMeses INTEGER, Precio REAL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS Socios (IdSocio INTEGER PRIMARY KEY AUTOINCREMENT, Nombre TEXT, Apellido TEXT, DNI TEXT UNIQUE, IdPlan INTEGER, FechaAlta TEXT, FechaVencimiento TEXT, Saldo REAL, Activo INTEGER DEFAULT 1)")
+    conn.commit()
+except Exception as e:
+    st.error(f"Error al crear tablas: {e}")
+
 # --- CONTROL DEL ESTADO DEL EDITOR Y RESETEO DE ALTA ---
 if "mostrar_editor" not in st.session_state:
     st.session_state.mostrar_editor = False
