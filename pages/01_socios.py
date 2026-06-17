@@ -9,11 +9,13 @@ st.title("Socios del Gimnasio")
 
 conn = get_connection()
 
-# --- CONTROL DEL ESTADO DEL EDITOR ---
+# --- CONTROL DEL ESTADO DEL EDITOR Y RESETEO DE ALTA ---
 if "mostrar_editor" not in st.session_state:
     st.session_state.mostrar_editor = False
 if "id_socio_a_editar" not in st.session_state:
     st.session_state.id_socio_a_editar = None
+if "alta_key" not in st.session_state:
+    st.session_state.alta_key = 0
 
 # --- TRAER LOS PLANES ---
 try:
@@ -29,11 +31,11 @@ with st.container(border=True):
     st.subheader("Agregar Nuevo Socio")
     col1, col2 = st.columns(2)
     with col1:
-        # Usamos keys para poder limpiar los campos después de guardar
-        nombre = st.text_input("Nombre", key="alta_nom")
-        apellido = st.text_input("Apellido", key="alta_ape")
+        # Usamos una key dinámica que cambia cuando guardamos
+        nombre = st.text_input("Nombre", key=f"alta_nom_{st.session_state.alta_key}")
+        apellido = st.text_input("Apellido", key=f"alta_ape_{st.session_state.alta_key}")
     with col2:
-        dni = st.text_input("DNI", key="alta_dni")
+        dni = st.text_input("DNI", key=f"alta_dni_{st.session_state.alta_key}")
         plan_elegido = st.selectbox("Seleccionar Plan", list(dict_planes.keys()) if dict_planes else ["Sin planes"])
     
     fecha_alta = st.date_input("Fecha de Inicio / Pago", value=datetime.today().date())
@@ -51,12 +53,12 @@ with st.container(border=True):
                            (nombre.strip().title(), apellido.strip().title(), dni, dict_planes[plan_elegido]['IdPlan'], fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -float(dict_planes[plan_elegido]['Precio'])))
             conn.commit()
             
-            # Limpiamos los campos visuales reseteando el session_state
-            st.session_state['alta_nom'] = ""
-            st.session_state['alta_ape'] = ""
-            st.session_state['alta_dni'] = ""
-            
+            # Sumamos 1 a la key, lo que resetea todos los campos de texto
+            st.session_state.alta_key += 1
+            st.success("Socio guardado correctamente.")
             st.rerun()
+        else:
+            st.error("Completá Nombre, Apellido y DNI.")
 
 st.divider()
 
@@ -80,7 +82,6 @@ if not df_socios.empty:
     
     # Reordenamos para que IdSocio sea la primera columna visible y eliminamos las técnicas
     columnas_finales = ['IdSocio', 'Nombre', 'Apellido', 'DNI', 'NombrePlan', 'FechaAlta', 'FechaVencimiento', 'Estado', 'Al Día', 'Saldo_Display']
-    # Filtramos por las columnas que realmente existen (por seguridad)
     columnas_finales = [col for col in columnas_finales if col in df_tabla.columns]
     
     st.dataframe(df_tabla[columnas_finales].rename(columns={'Saldo_Display': 'Saldo'}), use_container_width=True, hide_index=True)
