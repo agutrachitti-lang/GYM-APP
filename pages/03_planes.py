@@ -1,20 +1,33 @@
 import streamlit as st
 import pandas as pd
+import requests
 from database.conexion import get_connection
 
 st.set_page_config(page_title="Gestión de Planes", layout="wide")
 st.title("Configuración de Planes y Precios")
 
-conn = get_connection()
+# --- ADAPTACIÓN API TURSO ---
+url, token = get_connection()
 
-# --- CARGA SEGURA DE PLANES ---
-try:
-    df_planes = pd.read_sql("SELECT IdPlan, NombrePlan, DuracionMeses, Precio FROM Planes", conn)
-except:
-    df_planes = pd.DataFrame(columns=['IdPlan', 'NombrePlan', 'DuracionMeses', 'Precio'])
+def ejecutar_query(query, params=()):
+    payload = {"statements": [{"q": query, "params": params}]}
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.post(f"{url}/v2/pipeline", json=payload, headers=headers)
+    return response.json()
+
+def leer_tabla(query):
+    res = ejecutar_query(query)
+    try:
+        data = res['results'][0]['response']['result']
+        return pd.DataFrame(data['rows'], columns=[c['name'] for c in data['cols']])
+    except:
+        return pd.DataFrame()
+
+# --- CARGA DE PLANES ---
+df_planes = leer_tabla("SELECT IdPlan, NombrePlan, DuracionMeses, Precio FROM Planes")
 
 # --- 1. FORMULARIO PARA CREAR UN PLAN NUEVO ---
-with st.form("form_nuevo_plan", clear_on_submit=True):
+with st.container(border=True):
     st.subheader("➕ Crear Nuevo Plan")
     col1, col2, col3 = st.columns(3)
     
@@ -22,12 +35,10 @@ with st.form("form_nuevo_plan", clear_on_submit=True):
     with col2: duracion_meses = st.number_input("Duración en Meses", min_value=1, value=1)
     with col3: precio_plan = st.number_input("Precio ($)", min_value=0.0, step=500.0)
         
-    if st.form_submit_button("Guardar Nuevo Plan"):
+    if st.button("Guardar Nuevo Plan"):
         if nombre_plan:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO Planes (NombrePlan, DuracionMeses, Precio) VALUES (?, ?, ?)",
-                           (nombre_plan, int(duracion_meses), float(precio_plan)))
-            conn.commit()
+            ejecutar_query("INSERT INTO Planes (NombrePlan, DuracionMeses, Precio) VALUES (?, ?, ?)", 
+                           [nombre_plan, int(duracion_meses), float(precio_plan)])
             st.success("¡Plan creado!")
             st.rerun()
         else:
@@ -39,7 +50,7 @@ st.divider()
 st.subheader("📋 Planes Configurables")
 
 if not df_planes.empty:
-    # Mostramos listado formateado
+    # Mostramos listado
     df_mostrar = df_planes.copy()
     df_mostrar['Precio'] = df_mostrar['Precio'].map('${:,.2f}'.format)
     st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
@@ -54,27 +65,20 @@ if not df_planes.empty:
     col_edit, col_del = st.columns(2)
     
     with col_edit:
-        with st.form("form_editar_plan"):
-            st.write("⚙️ **Editar Valores**")
-            nuevo_nombre = st.text_input("Nombre", value=datos_plan['NombrePlan'])
-            nueva_duracion = st.number_input("Meses", value=int(datos_plan['DuracionMeses']))
-            nuevo_precio = st.number_input("Precio ($)", value=float(datos_plan['Precio']))
+        st.write("⚙️ **Editar Valores**")
+        nuevo_nombre = st.text_input("Nombre", value=datos_plan['NombrePlan'])
+        nueva_duracion = st.number_input("Meses", value=int(datos_plan['DuracionMeses']))
+        nuevo_precio = st.number_input("Precio ($)", value=float(datos_plan['Precio']))
+        
+        if st.button("Actualizar Plan"):
+            ejecutar_query("UPDATE Planes SET NombrePlan=?, DuracionMeses=?, Precio=? WHERE IdPlan=?",
+                           [nuevo_nombre, int(nueva_duracion), float(nuevo_precio), id_plan_sel])
+            st.rerun()
             
-            if st.form_submit_button("Actualizar"):
-                cursor = conn.cursor()
-                cursor.execute("UPDATE Planes SET NombrePlan=?, DuracionMeses=?, Precio=? WHERE IdPlan=?",
-                               (nuevo_nombre, int(nueva_duracion), float(nuevo_precio), id_plan_sel))
-                conn.commit()
-                st.rerun()
-                
     with col_del:
         if st.button("🗑️ Eliminar este plan", type="primary"):
-            try:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM Planes WHERE IdPlan=?", (id_plan_sel,))
-                conn.commit()
-                st.rerun()
-            except:
-                st.error("No se puede eliminar: socios activos lo están usando.")
+            res = ejecutar_query("DELETE FROM Planes WHERE IdPlan=?", [id_plan_sel])
+            # Si Turso devuelve error por FK, el usuario verá que no se borró
+            st.rerun()
 else:
     st.info("No hay planes cargados.")
