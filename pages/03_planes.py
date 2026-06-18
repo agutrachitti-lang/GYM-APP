@@ -72,7 +72,14 @@ st.subheader("📋 Planes Configurables")
 if not df_planes.empty:
     # Mostramos listado
     df_mostrar = df_planes.copy()
-    df_mostrar['Precio'] = df_mostrar['Precio'].map('${:,.2f}'.format)
+    
+    # DEBUG: Para ver qué columnas llegan realmente desde Turso
+    # st.write(df_mostrar.columns) 
+    
+    # APLICAR FORMATO SOLO SI LA COLUMNA EXISTE
+    if 'Precio' in df_mostrar.columns:
+        df_mostrar['Precio'] = df_mostrar['Precio'].map('${:,.2f}'.format)
+    
     st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
     st.subheader("✏️ Modificar o Eliminar Plan")
