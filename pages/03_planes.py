@@ -21,17 +21,20 @@ def leer_tabla(query):
     try:
         data = res['results'][0]['response']['result']
         rows = data['rows']
-        cols = [c['name'].lower() for c in data['cols']] # Forzamos minúsculas aquí
+        cols = [c['name'].lower() for c in data['cols']] 
         clean_rows = []
         for row in rows:
             clean_row = [cell['value'] if isinstance(cell, dict) and 'value' in cell else cell for cell in row]
             clean_rows.append(clean_row)
-        return pd.DataFrame(clean_rows, columns=cols)
+        
+        df = pd.DataFrame(clean_rows, columns=cols)
+        # MAGIA: Convertimos los textos numéricos que manda Turso en números reales
+        df = df.apply(pd.to_numeric, errors='ignore')
+        return df
     except Exception as e:
-        st.error(f"Error procesando datos: {e}")
         return pd.DataFrame()
 
-# --- CARGA DE PLANES (Columnas ahora son: idplan, nombreplan, duracionmeses, precio) ---
+# --- CARGA DE PLANES ---
 df_planes = leer_tabla("SELECT IdPlan, NombrePlan, DuracionMeses, Precio FROM Planes")
 
 # --- 1. FORMULARIO ---
@@ -57,14 +60,17 @@ st.subheader("📋 Planes Configurables")
 
 if not df_planes.empty:
     df_mostrar = df_planes.copy()
-    # Usamos 'precio' en minúscula
+    
+    # ESCUDO: Forzamos el precio a número una vez más por si acaso, y aplicamos formato
     if 'precio' in df_mostrar.columns:
-        df_mostrar['precio'] = df_mostrar['precio'].map('${:,.2f}'.format)
+        df_mostrar['precio'] = pd.to_numeric(df_mostrar['precio'], errors='coerce').map('${:,.2f}'.format)
+        
     st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
     st.subheader("✏️ Modificar o Eliminar Plan")
-    # Usamos minúsculas: 'idplan', 'nombreplan'
-    opciones_planes = df_planes.apply(lambda row: f"{row['idplan']} - {row['nombreplan']}", axis=1).tolist()
+    
+    # Nos aseguramos de que el idplan sea un entero (sin decimales) para el selector
+    opciones_planes = df_planes.apply(lambda row: f"{int(row['idplan'])} - {row['nombreplan']}", axis=1).tolist()
     plan_seleccionado = st.selectbox("Seleccionar:", opciones_planes)
     
     id_plan_sel = int(plan_seleccionado.split(" - ")[0])
@@ -73,7 +79,7 @@ if not df_planes.empty:
     col_edit, col_del = st.columns(2)
     with col_edit:
         st.write("⚙️ **Editar Valores**")
-        nuevo_nombre = st.text_input("Nombre", value=datos_plan['nombreplan'])
+        nuevo_nombre = st.text_input("Nombre", value=str(datos_plan['nombreplan']))
         nueva_duracion = st.number_input("Meses", value=int(datos_plan['duracionmeses']))
         nuevo_precio = st.number_input("Precio ($)", value=float(datos_plan['precio']))
         
