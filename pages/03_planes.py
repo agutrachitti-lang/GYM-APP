@@ -29,8 +29,21 @@ def leer_tabla(query):
     res = ejecutar_query(query)
     try:
         data = res['results'][0]['response']['result']
-        return pd.DataFrame(data['rows'], columns=[c['name'] for c in data['cols']])
-    except:
+        rows = data['rows']
+        cols = [c['name'] for c in data['cols']]
+        
+        # Procesamos las filas para extraer solo el 'value' de cada celda
+        clean_rows = []
+        for row in rows:
+            clean_row = [cell['value'] if isinstance(cell, dict) and 'value' in cell else cell for cell in row]
+            clean_rows.append(clean_row)
+            
+        df = pd.DataFrame(clean_rows, columns=cols)
+        # Normalizamos nombres de columnas a minúsculas para evitar errores
+        df.columns = [c.lower() for c in df.columns]
+        return df
+    except Exception as e:
+        st.error(f"Error procesando datos: {e}")
         return pd.DataFrame()
 
 # --- CARGA DE PLANES ---
