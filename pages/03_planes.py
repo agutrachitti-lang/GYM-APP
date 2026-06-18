@@ -28,10 +28,13 @@ def leer_tabla(query):
             clean_rows.append(clean_row)
         
         df = pd.DataFrame(clean_rows, columns=cols)
-        # MAGIA: Convertimos los textos numéricos que manda Turso en números reales
-        df = df.apply(pd.to_numeric, errors='ignore')
+        # Convertimos explícitamente a número las columnas que corresponden
+        for col in ['idplan', 'duracionmeses', 'precio']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
         return df
     except Exception as e:
+        st.error(f"Error leyendo tabla: {e}")
         return pd.DataFrame()
 
 # --- CARGA DE PLANES ---
@@ -61,15 +64,15 @@ st.subheader("📋 Planes Configurables")
 if not df_planes.empty:
     df_mostrar = df_planes.copy()
     
-    # ESCUDO: Forzamos el precio a número una vez más por si acaso, y aplicamos formato
+    # Aplicamos formato de moneda para la vista limpia
     if 'precio' in df_mostrar.columns:
-        df_mostrar['precio'] = pd.to_numeric(df_mostrar['precio'], errors='coerce').map('${:,.2f}'.format)
+        df_mostrar['precio'] = df_mostrar['precio'].map('${:,.2f}'.format)
         
     st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
     st.subheader("✏️ Modificar o Eliminar Plan")
     
-    # Nos aseguramos de que el idplan sea un entero (sin decimales) para el selector
+    # Todo en minúsculas para coincidir exactamente con el DataFrame
     opciones_planes = df_planes.apply(lambda row: f"{int(row['idplan'])} - {row['nombreplan']}", axis=1).tolist()
     plan_seleccionado = st.selectbox("Seleccionar:", opciones_planes)
     
