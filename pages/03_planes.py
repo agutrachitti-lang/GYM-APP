@@ -35,12 +35,22 @@ with st.container(border=True):
     with col2: duracion_meses = st.number_input("Duración en Meses", min_value=1, value=1)
     with col3: precio_plan = st.number_input("Precio ($)", min_value=0.0, step=500.0)
         
+   # ... (arriba de esto está todo igual)
     if st.button("Guardar Nuevo Plan"):
         if nombre_plan:
-            ejecutar_query("INSERT INTO Planes (NombrePlan, DuracionMeses, Precio) VALUES (?, ?, ?)", 
-                           [nombre_plan, int(duracion_meses), float(precio_plan)])
-            st.success("¡Plan creado!")
-            st.rerun()
+            # --- AGREGAMOS ESTE DEBUG ---
+            try:
+                res = ejecutar_query("INSERT INTO Planes (NombrePlan, DuracionMeses, Precio) VALUES (?, ?, ?)", 
+                                    [nombre_plan, int(duracion_meses), float(precio_plan)])
+                
+                # Revisamos si la API de Turso devolvió error
+                if "error" in str(res).lower():
+                    st.error(f"Error de Turso: {res}")
+                else:
+                    st.success("¡Plan creado!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Error técnico: {e}")
         else:
             st.error("El nombre no puede estar vacío.")
 
