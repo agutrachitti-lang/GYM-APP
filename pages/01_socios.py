@@ -131,7 +131,7 @@ st.divider()
 st.subheader("Listado Actual")
 if not df_socios.empty:
     
-    csv = df_socios.to_csv(index=False).encode('utf-8')
+    csv = df_socios.to_csv(index=False, sep=';', decimal=',').encode('utf-8-sig')
     st.download_button(label="📥 Descargar Listado a Excel", data=csv, file_name='socios_gym.csv', mime='text/csv')
     
     buscar = st.text_input("🔍 Buscar socio por Nombre, Apellido o DNI:")
