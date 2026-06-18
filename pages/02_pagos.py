@@ -60,7 +60,7 @@ with st.container(border=True):
         id_socio_sel = int(socio_sel.split(" - ")[0])
         saldo_actual = df_socios[df_socios['idsocio'] == id_socio_sel]['saldo'].iloc[0]
         
-        st.info(f"💰 AL DÍA: ${float(saldo_actual):,.2f}")
+        st.info(f"💰 SALDO: ${float(saldo_actual):,.2f}")
         
         metodo = st.selectbox("2. Método de Pago", ["Efectivo", "Transferencia", "MercadoPago", "Tarjeta"])
         monto = st.number_input("3. Monto a ingresar ($)", min_value=0.0, step=1000.0)
