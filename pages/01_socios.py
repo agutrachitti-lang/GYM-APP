@@ -12,10 +12,25 @@ st.title("Socios del Gimnasio")
 url, token = get_connection()
 
 def ejecutar_query(query, params=()):
-    payload = {"requests": [{"type": "execute", "stmt": {"sql": query, "args": params}}]}
+    payload = {
+        "requests": [{"type": "execute", "stmt": {"sql": query, "args": params}}]
+    }
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.post(f"{url}/v2/pipeline", json=payload, headers=headers)
-    return response.json()
+    
+    res_json = response.json()
+    
+    # --- CONTROL DE ERRORES ---
+    # Revisamos si la respuesta contiene errores en el pipeline
+    try:
+        results = res_json.get("results", [])
+        for res in results:
+            if "error" in res.get("response", {}):
+                st.error(f"Error de base de datos: {res['response']['error']['message']}")
+                return False
+    except:
+        pass
+    return True
 
 def leer_tabla(query):
     res = ejecutar_query(query)
