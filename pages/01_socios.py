@@ -12,25 +12,36 @@ st.title("Socios del Gimnasio")
 url, token = get_connection()
 
 def ejecutar_query(query, params=()):
+    # TRADUCTOR ESTRICTO PARA TURSO V2 (Para que no rechace los datos en silencio)
+    formatted_params = []
+    for p in params:
+        if p is None:
+            formatted_params.append({"type": "null"})
+        elif isinstance(p, int):
+            formatted_params.append({"type": "integer", "value": str(p)})
+        elif isinstance(p, float):
+            formatted_params.append({"type": "float", "value": str(p)})
+        else:
+            formatted_params.append({"type": "text", "value": str(p)})
+
     payload = {
-        "requests": [{"type": "execute", "stmt": {"sql": query, "args": params}}]
+        "requests": [{"type": "execute", "stmt": {"sql": query, "args": formatted_params}}]
     }
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.post(f"{url}/v2/pipeline", json=payload, headers=headers)
     
     res_json = response.json()
     
-    # --- CONTROL DE ERRORES ---
-    # Mostramos el cartel rojo si Turso se queja de algo
+    # --- CONTROL DE ERRORES REAL ---
+    # Ahora sí detecta los errores donde Turso realmente los pone
     try:
-        results = res_json.get("results", [])
-        for res in results:
-            if "error" in res.get("response", {}):
-                st.error(f"Error de base de datos: {res['response']['error']['message']}")
+        for res in res_json.get("results", []):
+            if res.get("type") == "error":
+                st.error(f"⚠️ Error de base de datos: {res.get('error', {}).get('message')}")
     except:
         pass
         
-    return res_json # <-- ESTO ERA LO QUE FALTABA PARA QUE VUELVAN LOS DATOS
+    return res_json
 
 def leer_tabla(query):
     res = ejecutar_query(query)
@@ -51,7 +62,7 @@ def leer_tabla(query):
     except Exception as e:
         return pd.DataFrame()
 
-# --- ESTADOS DE SESIÓN (Para el panel de edición y reseteo de formulario) ---
+# --- ESTADOS DE SESIÓN ---
 if "mostrar_editor" not in st.session_state:
     st.session_state.mostrar_editor = False
 if "id_socio_a_editar" not in st.session_state:
@@ -98,8 +109,9 @@ with st.container(border=True):
                 [nombre.strip().title(), apellido.strip().title(), dni, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
             )
             
-            # Verificamos si en el JSON de respuesta NO hay ningún error
-            if "error" not in str(res).lower():
+            # Verificamos si realmente funcionó antes de resetear
+            hay_error = any(r.get("type") == "error" for r in res.get("results", []))
+            if not hay_error:
                 st.session_state.alta_key += 1
                 st.success("Socio guardado exitosamente.")
                 st.rerun()
@@ -114,7 +126,6 @@ st.divider()
 st.subheader("Listado Actual")
 if not df_socios.empty:
     
-    # Botón para descargar Excel (CSV)
     csv = df_socios.to_csv(index=False).encode('utf-8')
     st.download_button(label="📥 Descargar Listado a Excel", data=csv, file_name='socios_gym.csv', mime='text/csv')
     
@@ -123,17 +134,14 @@ if not df_socios.empty:
     
     df_tabla = df_socios.copy()
     
-    # Aplicar filtro de búsqueda
     if buscar:
         mask = df_tabla.astype(str).apply(lambda x: x.str.contains(buscar, case=False)).any(axis=1)
         df_tabla = df_tabla[mask]
     
-    # Formatear columnas
     df_tabla['Estado'] = df_tabla['activo'].apply(lambda x: '🟢 Activo' if str(x).strip() in ['1', '1.0'] else '🔴 Inactivo')
     df_tabla['Al Día'] = df_tabla['saldo'].apply(lambda x: 'Sí' if pd.notna(x) and float(x) >= 0 else 'No')
     df_tabla['Saldo_Display'] = df_tabla['saldo'].apply(lambda x: f"${float(x):,.2f}" if mostrar_saldos else "******")
     
-    # Renombrar columnas para la vista bonita (usando las minúsculas como origen)
     rename_dict = {
         'idsocio': 'IdSocio', 'nombre': 'Nombre', 'apellido': 'Apellido', 'dni': 'DNI',
         'nombreplan': 'NombrePlan', 'fechaalta': 'FechaAlta', 'fechavencimiento': 'FechaVencimiento'
@@ -145,7 +153,6 @@ if not df_socios.empty:
     
     st.dataframe(df_tabla[col_orden].rename(columns={'Saldo_Display': 'Saldo'}), use_container_width=True, hide_index=True)
 
-    # Selector para modificar
     st.write("---")
     opciones_socios = df_socios.apply(lambda r: f"{int(r['idsocio'])} - {r['nombre']} {r['apellido']}", axis=1).tolist()
     
@@ -187,7 +194,6 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
                 index_plan = lista_planes.index(nombre_plan_actual) if nombre_plan_actual in lista_planes else 0
                 nuevo_plan = st.selectbox("Plan", lista_planes, index=index_plan, key="edit_plan")
                 
-                # Manejo seguro de fecha de vencimiento
                 try:
                     venc_actual = datetime.strptime(str(s['fechavencimiento']), '%Y-%m-%d').date()
                 except:
@@ -200,14 +206,20 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
                 with col_btn1:
                     if st.button("Actualizar"):
                         estado_bit = 1 if nuevo_estado else 0
-                        nuevo_id_plan = int(df_planes[df_planes['nombreplan'] == nuevo_plan]['idplan'].iloc[0]) if not df_planes.empty else None
+                        nuevo_id_plan = None
+                        if not df_planes.empty and nuevo_plan != "Sin planes":
+                            nuevo_id_plan = int(df_planes[df_planes['nombreplan'] == nuevo_plan]['idplan'].iloc[0])
                         
-                        ejecutar_query(
+                        res = ejecutar_query(
                             "UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, IdPlan=?, FechaVencimiento=?, Saldo=?, Activo=? WHERE IdSocio=?",
                             [n, a, d, nuevo_id_plan, nuevo_venc.strftime('%Y-%m-%d'), float(sald), estado_bit, int(s['idsocio'])]
                         )
-                        st.session_state.mostrar_editor = False
-                        st.rerun()
+                        
+                        hay_error = any(r.get("type") == "error" for r in res.get("results", []))
+                        if not hay_error:
+                            st.session_state.mostrar_editor = False
+                            st.rerun()
+                            
                 with col_btn2:
                     if st.button("❌ Cancelar / Cerrar Editor"):
                         st.session_state.mostrar_editor = False
@@ -218,9 +230,12 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
                 st.write("🗑️ **Eliminar Socio**")
                 st.warning(f"Se eliminará a {s['nombre']} {s['apellido']} permanentemente.")
                 if st.button("Sí, Eliminar"):
-                    ejecutar_query("DELETE FROM Socios WHERE IdSocio=?", [int(s['idsocio'])])
-                    st.session_state.mostrar_editor = False
-                    st.rerun()
+                    res = ejecutar_query("DELETE FROM Socios WHERE IdSocio=?", [int(s['idsocio'])])
+                    
+                    hay_error = any(r.get("type") == "error" for r in res.get("results", []))
+                    if not hay_error:
+                        st.session_state.mostrar_editor = False
+                        st.rerun()
     else:
         st.error("Socio no encontrado. Por favor, recargá la página.")
         st.session_state.mostrar_editor = False
