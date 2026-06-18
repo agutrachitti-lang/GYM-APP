@@ -85,10 +85,16 @@ if not df_historial.empty:
     for i, row in df_historial.iterrows():
         c1, c2 = st.columns([3, 1])
         c1.write(f"{row['fechapago']} | **{row['nombre']} {row['apellido']}** | ${float(row['monto']):,.2f} | {row['metodopago']}")
-        if c2.button("🗑️", key=f"del_{row['idpago']}"):
-            # Revertir Saldo y Borrar Pago
-            ejecutar_query("UPDATE Socios SET Saldo = Saldo - ? WHERE IdSocio = ?", [float(row['monto']), int(row['idsocio'])])
-            ejecutar_query("DELETE FROM Pagos WHERE IdPago = ?", [int(row['idpago'])])
-            st.rerun()
+        
+        # --- DOBLE CHECK PARA ELIMINAR ---
+        with c2:
+            # Usamos un expander para que el usuario tenga que interactuar dos veces
+            with st.popover("🗑️ Eliminar"):
+                st.warning(f"¿Seguro que querés borrar este pago de ${float(row['monto']):,.2f} de {row['nombre']}?")
+                if st.button("Sí, borrar definitivamente", key=f"del_{row['idpago']}", type="primary"):
+                    # Revertir Saldo y Borrar Pago
+                    ejecutar_query("UPDATE Socios SET Saldo = Saldo - ? WHERE IdSocio = ?", [float(row['monto']), int(row['idsocio'])])
+                    ejecutar_query("DELETE FROM Pagos WHERE IdPago = ?", [int(row['idpago'])])
+                    st.rerun()
 else:
     st.info("No hay pagos registrados.")
