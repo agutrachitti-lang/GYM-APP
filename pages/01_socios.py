@@ -21,16 +21,16 @@ def ejecutar_query(query, params=()):
     res_json = response.json()
     
     # --- CONTROL DE ERRORES ---
-    # Revisamos si la respuesta contiene errores en el pipeline
+    # Mostramos el cartel rojo si Turso se queja de algo
     try:
         results = res_json.get("results", [])
         for res in results:
             if "error" in res.get("response", {}):
                 st.error(f"Error de base de datos: {res['response']['error']['message']}")
-                return False
     except:
         pass
-    return True
+        
+    return res_json # <-- ESTO ERA LO QUE FALTABA PARA QUE VUELVAN LOS DATOS
 
 def leer_tabla(query):
     res = ejecutar_query(query)
@@ -93,14 +93,16 @@ with st.container(border=True):
 
     if st.button("Guardar Socio"):
         if nombre and apellido and dni:
-            # Se guarda con saldo negativo equivalente al precio del plan (deuda inicial)
-            ejecutar_query(
+            res = ejecutar_query(
                 "INSERT INTO Socios (Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,1)", 
                 [nombre.strip().title(), apellido.strip().title(), dni, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
             )
-            st.session_state.alta_key += 1
-            st.success("Socio guardado exitosamente.")
-            st.rerun()
+            
+            # Verificamos si en el JSON de respuesta NO hay ningún error
+            if "error" not in str(res).lower():
+                st.session_state.alta_key += 1
+                st.success("Socio guardado exitosamente.")
+                st.rerun()
         else:
             st.error("Por favor completa los campos obligatorios.")
 
