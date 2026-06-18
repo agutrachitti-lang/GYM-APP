@@ -90,15 +90,14 @@ with st.container(border=True):
         fecha_vencimiento = fecha_alta + relativedelta(months=meses)
         st.info(f"💰 Precio del Plan: ${precio:,.2f} | 📅 Vence automáticamente el: {fecha_vencimiento.strftime('%d/%m/%Y')}")
 
-   if st.button("Guardar Socio"):
+    if st.button("Guardar Socio"):
         if nombre and apellido and dni:
-
             # --- CONTROL DE DUPLICADOS EN PYTHON ---
             dni_limpio = str(dni).strip()
             ya_existe = False
             if not df_socios.empty:
                 ya_existe = dni_limpio in df_socios['dni'].astype(str).str.strip().values
-
+                
             if ya_existe:
                 st.error("⚠️ El DNI ingresado ya pertenece a un socio registrado.")
             else:
@@ -107,12 +106,9 @@ with st.container(border=True):
                 if not df_socios.empty and pd.notna(df_socios['idsocio'].max()):
                     nuevo_id = int(df_socios['idsocio'].max()) + 1
 
-                # --- SOLUCIÓN: DEJAMOS QUE TURSO ASIGNE EL ID AUTOINCREMENTAL ---
                 res = ejecutar_query(
                     "INSERT INTO Socios (IdSocio, Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,?,1)", 
                     [nuevo_id, nombre.strip().title(), apellido.strip().title(), dni_limpio, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
-                    "INSERT INTO Socios (Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,1)", 
-                    [nombre.strip().title(), apellido.strip().title(), dni_limpio, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
                 )
                 
                 str_res = str(res).lower()
@@ -121,7 +117,7 @@ with st.container(border=True):
                     st.json(res)
                 else:
                     st.session_state.alta_key += 1
-                    st.success("Socio guardado exitosamente.")
+                    st.success(f"Socio guardado exitosamente con ID {nuevo_id}.")
                     st.rerun()
         else:
             st.error("Por favor completa los campos obligatorios.")
@@ -134,6 +130,7 @@ st.divider()
 st.subheader("Listado Actual")
 if not df_socios.empty:
     
+    # Formato adaptado para el Excel en Argentina
     csv = df_socios.to_csv(index=False, sep=';', decimal=',').encode('utf-8-sig')
     st.download_button(label="📥 Descargar Listado a Excel", data=csv, file_name='socios_gym.csv', mime='text/csv')
     
@@ -163,6 +160,7 @@ if not df_socios.empty:
 
     st.write("---")
     
+    # ESCUDO ANTI "None": Si el ID está roto, le ponemos un 0 para que no explote y te deje borrarlo
     opciones_socios = df_socios.apply(
         lambda r: f"{int(r['idsocio']) if pd.notna(r['idsocio']) else 0} - {r['nombre']} {r['apellido']}", axis=1
     ).tolist()
@@ -253,14 +251,11 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
             with st.container(border=True):
                 st.write("🗑️ **Eliminar Socio**")
                 
-                # --- DOBLE CHECK PARA BORRAR SOCIO ---
                 with st.popover("🗑️ Eliminar"):
                     st.warning(f"🚨 Se eliminará a {s['nombre']} {s['apellido']} y TODO su historial de pagos permanentemente.")
                     if st.button("Sí, Eliminar todo", type="primary"):
                         if id_actual == 0:
-                            # 1. Borramos pagos buscando por un subquery con el DNI
                             ejecutar_query("DELETE FROM Pagos WHERE IdSocio IN (SELECT IdSocio FROM Socios WHERE DNI=?)", [str(s['dni'])])
-                            # 2. Borramos al socio
                             res = ejecutar_query("DELETE FROM Socios WHERE DNI=?", [str(s['dni'])])
                         else:
                             # 1. Borrado en cascada: Eliminamos primero los pagos para que no queden huerfanos
