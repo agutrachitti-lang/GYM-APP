@@ -90,23 +90,16 @@ with st.container(border=True):
         fecha_vencimiento = fecha_alta + relativedelta(months=meses)
         st.info(f"💰 Precio del Plan: ${precio:,.2f} | 📅 Vence automáticamente el: {fecha_vencimiento.strftime('%d/%m/%Y')}")
 
+    # --- EN EL BOTÓN "Guardar Socio" DE socios.py ---
     if st.button("Guardar Socio"):
         if nombre and apellido and dni:
+            # Quitamos el cálculo del nuevo_id. Turso lo hará solo.
+            res = ejecutar_query(
+                "INSERT INTO Socios (Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,1)", 
+                [nombre.strip().title(), apellido.strip().title(), dni, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
+            )
             
-            # --- CONTROL DE DUPLICADOS EN PYTHON ---
-            dni_limpio = str(dni).strip()
-            ya_existe = False
-            if not df_socios.empty:
-                ya_existe = dni_limpio in df_socios['dni'].astype(str).str.strip().values
-                
-            if ya_existe:
-                st.error("⚠️ El DNI ingresado ya pertenece a un socio registrado.")
-            else:
-                # --- SOLUCIÓN: DEJAMOS QUE TURSO ASIGNE EL ID AUTOINCREMENTAL ---
-                res = ejecutar_query(
-                    "INSERT INTO Socios (Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,1)", 
-                    [nombre.strip().title(), apellido.strip().title(), dni_limpio, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
-                )
+            # ... el resto del código igual ...
                 
                 str_res = str(res).lower()
                 if "error" in str_res or ("message" in res and "results" not in res):
