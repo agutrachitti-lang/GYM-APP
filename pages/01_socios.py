@@ -12,15 +12,17 @@ st.title("Socios del Gimnasio")
 url, token = get_connection()
 
 def ejecutar_query(query, params=()):
-    # TRADUCTOR ESTRICTO PARA TURSO V2 (Para que no rechace los datos en silencio)
+    # Traductor milimétrico para Turso v2
     formatted_params = []
     for p in params:
         if p is None:
             formatted_params.append({"type": "null"})
         elif isinstance(p, int):
+            # Enteros van como string por seguridad de 64bits
             formatted_params.append({"type": "integer", "value": str(p)})
         elif isinstance(p, float):
-            formatted_params.append({"type": "float", "value": str(p)})
+            # Flotantes van como números reales
+            formatted_params.append({"type": "float", "value": float(p)})
         else:
             formatted_params.append({"type": "text", "value": str(p)})
 
@@ -30,18 +32,7 @@ def ejecutar_query(query, params=()):
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.post(f"{url}/v2/pipeline", json=payload, headers=headers)
     
-    res_json = response.json()
-    
-    # --- CONTROL DE ERRORES REAL ---
-    # Ahora sí detecta los errores donde Turso realmente los pone
-    try:
-        for res in res_json.get("results", []):
-            if res.get("type") == "error":
-                st.error(f"⚠️ Error de base de datos: {res.get('error', {}).get('message')}")
-    except:
-        pass
-        
-    return res_json
+    return response.json()
 
 def leer_tabla(query):
     res = ejecutar_query(query)
@@ -109,9 +100,12 @@ with st.container(border=True):
                 [nombre.strip().title(), apellido.strip().title(), dni, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
             )
             
-            # Verificamos si realmente funcionó antes de resetear
-            hay_error = any(r.get("type") == "error" for r in res.get("results", []))
-            if not hay_error:
+            # --- BLINDAJE CONTRA ERRORES SILENCIOSOS ---
+            str_res = str(res).lower()
+            if "error" in str_res or ("message" in res and "results" not in res):
+                st.error("⚠️ No se pudo guardar. Turso rechazó la orden. Detalle técnico:")
+                st.json(res)  # Esto imprimirá el problema exacto en pantalla
+            else:
                 st.session_state.alta_key += 1
                 st.success("Socio guardado exitosamente.")
                 st.rerun()
@@ -215,9 +209,14 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
                             [n, a, d, nuevo_id_plan, nuevo_venc.strftime('%Y-%m-%d'), float(sald), estado_bit, int(s['idsocio'])]
                         )
                         
-                        hay_error = any(r.get("type") == "error" for r in res.get("results", []))
-                        if not hay_error:
+                        # --- BLINDAJE PARA ACTUALIZAR ---
+                        str_res = str(res).lower()
+                        if "error" in str_res or ("message" in res and "results" not in res):
+                            st.error("⚠️ No se pudo actualizar. Detalle técnico:")
+                            st.json(res)
+                        else:
                             st.session_state.mostrar_editor = False
+                            st.success("Socio actualizado.")
                             st.rerun()
                             
                 with col_btn2:
@@ -232,8 +231,11 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
                 if st.button("Sí, Eliminar"):
                     res = ejecutar_query("DELETE FROM Socios WHERE IdSocio=?", [int(s['idsocio'])])
                     
-                    hay_error = any(r.get("type") == "error" for r in res.get("results", []))
-                    if not hay_error:
+                    str_res = str(res).lower()
+                    if "error" in str_res or ("message" in res and "results" not in res):
+                        st.error("⚠️ No se pudo eliminar. Detalle técnico:")
+                        st.json(res)
+                    else:
                         st.session_state.mostrar_editor = False
                         st.rerun()
     else:
