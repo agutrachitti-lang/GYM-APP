@@ -10,7 +10,17 @@ st.title("Configuración de Planes y Precios")
 url, token = get_connection()
 
 def ejecutar_query(query, params=()):
-    payload = {"statements": [{"q": query, "params": params}]}
+    payload = {
+        "requests": [
+            {
+                "type": "execute",
+                "stmt": {
+                    "sql": query,
+                    "args": params
+                }
+            }
+        ]
+    }
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.post(f"{url}/v2/pipeline", json=payload, headers=headers)
     return response.json()
