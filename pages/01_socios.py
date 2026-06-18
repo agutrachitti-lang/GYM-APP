@@ -12,16 +12,13 @@ st.title("Socios del Gimnasio")
 url, token = get_connection()
 
 def ejecutar_query(query, params=()):
-    # Traductor milimétrico para Turso v2
     formatted_params = []
     for p in params:
         if p is None:
             formatted_params.append({"type": "null"})
         elif isinstance(p, int):
-            # Enteros van como string por seguridad de 64bits
             formatted_params.append({"type": "integer", "value": str(p)})
         elif isinstance(p, float):
-            # Flotantes van como números reales
             formatted_params.append({"type": "float", "value": float(p)})
         else:
             formatted_params.append({"type": "text", "value": str(p)})
@@ -95,20 +92,34 @@ with st.container(border=True):
 
     if st.button("Guardar Socio"):
         if nombre and apellido and dni:
-            res = ejecutar_query(
-                "INSERT INTO Socios (Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,1)", 
-                [nombre.strip().title(), apellido.strip().title(), dni, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
-            )
             
-            # --- BLINDAJE CONTRA ERRORES SILENCIOSOS ---
-            str_res = str(res).lower()
-            if "error" in str_res or ("message" in res and "results" not in res):
-                st.error("⚠️ No se pudo guardar. Turso rechazó la orden. Detalle técnico:")
-                st.json(res)  # Esto imprimirá el problema exacto en pantalla
+            # --- CONTROL DE DUPLICADOS EN PYTHON ---
+            dni_limpio = str(dni).strip()
+            ya_existe = False
+            if not df_socios.empty:
+                ya_existe = dni_limpio in df_socios['dni'].astype(str).str.strip().values
+                
+            if ya_existe:
+                st.error("⚠️ El DNI ingresado ya pertenece a un socio registrado.")
             else:
-                st.session_state.alta_key += 1
-                st.success("Socio guardado exitosamente.")
-                st.rerun()
+                # --- TU BALA DE PLATA PARA EL ID ---
+                nuevo_id = 1
+                if not df_socios.empty and pd.notna(df_socios['idsocio'].max()):
+                    nuevo_id = int(df_socios['idsocio'].max()) + 1
+
+                res = ejecutar_query(
+                    "INSERT INTO Socios (IdSocio, Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,?,1)", 
+                    [nuevo_id, nombre.strip().title(), apellido.strip().title(), dni_limpio, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
+                )
+                
+                str_res = str(res).lower()
+                if "error" in str_res or ("message" in res and "results" not in res):
+                    st.error("⚠️ Error técnico al guardar en Turso:")
+                    st.json(res)
+                else:
+                    st.session_state.alta_key += 1
+                    st.success("Socio guardado exitosamente.")
+                    st.rerun()
         else:
             st.error("Por favor completa los campos obligatorios.")
 
@@ -134,7 +145,7 @@ if not df_socios.empty:
     
     df_tabla['Estado'] = df_tabla['activo'].apply(lambda x: '🟢 Activo' if str(x).strip() in ['1', '1.0'] else '🔴 Inactivo')
     df_tabla['Al Día'] = df_tabla['saldo'].apply(lambda x: 'Sí' if pd.notna(x) and float(x) >= 0 else 'No')
-    df_tabla['Saldo_Display'] = df_tabla['saldo'].apply(lambda x: f"${float(x):,.2f}" if mostrar_saldos else "******")
+    df_tabla['Saldo_Display'] = df_tabla['saldo'].apply(lambda x: f"${float(x):,.2f}" if pd.notna(x) and mostrar_saldos else ("******" if pd.notna(x) else "$0.00"))
     
     rename_dict = {
         'idsocio': 'IdSocio', 'nombre': 'Nombre', 'apellido': 'Apellido', 'dni': 'DNI',
@@ -148,7 +159,11 @@ if not df_socios.empty:
     st.dataframe(df_tabla[col_orden].rename(columns={'Saldo_Display': 'Saldo'}), use_container_width=True, hide_index=True)
 
     st.write("---")
-    opciones_socios = df_socios.apply(lambda r: f"{int(r['idsocio'])} - {r['nombre']} {r['apellido']}", axis=1).tolist()
+    
+    # ESCUDO ANTI "None": Si el ID está roto, le ponemos un 0 para que no explote y te deje borrarlo
+    opciones_socios = df_socios.apply(
+        lambda r: f"{int(r['idsocio']) if pd.notna(r['idsocio']) else 0} - {r['nombre']} {r['apellido']}", axis=1
+    ).tolist()
     
     col_sel, col_btn = st.columns([4, 1])
     with col_sel:
@@ -167,11 +182,17 @@ else:
 # ==========================================
 if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not None:
     st.write("---")
-    socios_filtrados = df_socios[df_socios['idsocio'] == st.session_state.id_socio_a_editar]
+    
+    # Manejamos el caso de que el ID sea 0 (los que quedaron rotos por Turso)
+    if st.session_state.id_socio_a_editar == 0:
+        socios_filtrados = df_socios[df_socios['idsocio'].isna()]
+    else:
+        socios_filtrados = df_socios[df_socios['idsocio'] == st.session_state.id_socio_a_editar]
     
     if not socios_filtrados.empty:
         s = socios_filtrados.iloc[0]
-        st.info(f"⚙️ Editando a: {s['nombre']} {s['apellido']} (ID: {int(s['idsocio'])})")
+        id_actual = int(s['idsocio']) if pd.notna(s['idsocio']) else 0
+        st.info(f"⚙️ Editando a: {s['nombre']} {s['apellido']} (ID: {id_actual})")
         
         col_e, col_d = st.columns([2, 1])
         with col_e:
@@ -180,9 +201,9 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
                 es_activo = True if str(s['activo']).strip() in ['1', '1.0'] else False
                 nuevo_estado = st.checkbox("🟢 Socio Activo", value=es_activo)
                 
-                n = st.text_input("Nombre", value=s['nombre'])
-                a = st.text_input("Apellido", value=s['apellido'])
-                d = st.text_input("DNI", value=s['dni'])
+                n = st.text_input("Nombre", value=str(s['nombre']))
+                a = st.text_input("Apellido", value=str(s['apellido']))
+                d = st.text_input("DNI", value=str(s['dni']) if pd.notna(s['dni']) else "")
                 
                 nombre_plan_actual = s.get('nombreplan', '')
                 index_plan = lista_planes.index(nombre_plan_actual) if nombre_plan_actual in lista_planes else 0
@@ -204,19 +225,23 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
                         if not df_planes.empty and nuevo_plan != "Sin planes":
                             nuevo_id_plan = int(df_planes[df_planes['nombreplan'] == nuevo_plan]['idplan'].iloc[0])
                         
-                        res = ejecutar_query(
-                            "UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, IdPlan=?, FechaVencimiento=?, Saldo=?, Activo=? WHERE IdSocio=?",
-                            [n, a, d, nuevo_id_plan, nuevo_venc.strftime('%Y-%m-%d'), float(sald), estado_bit, int(s['idsocio'])]
-                        )
+                        # Si el ID era 0 (roto), actualizamos buscando por DNI, sino por ID normal
+                        if id_actual == 0:
+                            res = ejecutar_query(
+                                "UPDATE Socios SET Nombre=?, Apellido=?, IdPlan=?, FechaVencimiento=?, Saldo=?, Activo=? WHERE DNI=?",
+                                [n, a, nuevo_id_plan, nuevo_venc.strftime('%Y-%m-%d'), float(sald), estado_bit, d]
+                            )
+                        else:
+                            res = ejecutar_query(
+                                "UPDATE Socios SET Nombre=?, Apellido=?, DNI=?, IdPlan=?, FechaVencimiento=?, Saldo=?, Activo=? WHERE IdSocio=?",
+                                [n, a, d, nuevo_id_plan, nuevo_venc.strftime('%Y-%m-%d'), float(sald), estado_bit, id_actual]
+                            )
                         
-                        # --- BLINDAJE PARA ACTUALIZAR ---
                         str_res = str(res).lower()
                         if "error" in str_res or ("message" in res and "results" not in res):
-                            st.error("⚠️ No se pudo actualizar. Detalle técnico:")
-                            st.json(res)
+                            st.error("⚠️ No se pudo actualizar.")
                         else:
                             st.session_state.mostrar_editor = False
-                            st.success("Socio actualizado.")
                             st.rerun()
                             
                 with col_btn2:
@@ -229,15 +254,13 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
                 st.write("🗑️ **Eliminar Socio**")
                 st.warning(f"Se eliminará a {s['nombre']} {s['apellido']} permanentemente.")
                 if st.button("Sí, Eliminar"):
-                    res = ejecutar_query("DELETE FROM Socios WHERE IdSocio=?", [int(s['idsocio'])])
-                    
-                    str_res = str(res).lower()
-                    if "error" in str_res or ("message" in res and "results" not in res):
-                        st.error("⚠️ No se pudo eliminar. Detalle técnico:")
-                        st.json(res)
+                    if id_actual == 0:
+                        res = ejecutar_query("DELETE FROM Socios WHERE DNI=?", [str(s['dni'])])
                     else:
-                        st.session_state.mostrar_editor = False
-                        st.rerun()
+                        res = ejecutar_query("DELETE FROM Socios WHERE IdSocio=?", [id_actual])
+                    
+                    st.session_state.mostrar_editor = False
+                    st.rerun()
     else:
         st.error("Socio no encontrado. Por favor, recargá la página.")
         st.session_state.mostrar_editor = False
