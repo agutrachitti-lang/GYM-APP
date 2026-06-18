@@ -10,7 +10,9 @@ st.title("Socios del Gimnasio")
 url, token = get_connection()
 
 def ejecutar_query(query, params=()):
-    payload = {"statements": [{"q": query, "params": params}]}
+    payload = {
+        "requests": [{"type": "execute", "stmt": {"sql": query, "args": params}}]
+    }
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.post(f"{url}/v2/pipeline", json=payload, headers=headers)
     return response.json()
@@ -19,8 +21,20 @@ def leer_tabla(query):
     res = ejecutar_query(query)
     try:
         data = res['results'][0]['response']['result']
-        return pd.DataFrame(data['rows'], columns=[c['name'] for c in data['cols']])
-    except:
+        rows = data['rows']
+        cols = [c['name'].lower() for c in data['cols']] # Forzamos minúsculas
+        clean_rows = []
+        for row in rows:
+            clean_row = [cell['value'] if isinstance(cell, dict) and 'value' in cell else cell for cell in row]
+            clean_rows.append(clean_row)
+            
+        df = pd.DataFrame(clean_rows, columns=cols)
+        # Convertimos explícitamente a número las columnas que corresponden
+        for col in ['idsocio', 'dni', 'idplan', 'saldo', 'activo']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        return df
+    except Exception as e:
         return pd.DataFrame()
 
 # --- CARGAR DATOS ---
@@ -36,20 +50,22 @@ with st.container(border=True):
         apellido = st.text_input("Apellido")
     with col2:
         dni = st.text_input("DNI")
-        # Cargamos los planes dinámicamente desde la BD
-        lista_planes = df_planes['NombrePlan'].tolist() if not df_planes.empty else ["Sin planes"]
+        # Usamos minúsculas: 'nombreplan'
+        lista_planes = df_planes['nombreplan'].tolist() if not df_planes.empty else ["Sin planes"]
         plan_elegido = st.selectbox("Seleccionar Plan", lista_planes)
 
     if st.button("Guardar Socio"):
         if nombre and apellido and dni:
-            # Buscamos el ID del plan seleccionado
-            id_plan = df_planes[df_planes['NombrePlan'] == plan_elegido]['IdPlan'].iloc[0] if not df_planes.empty else None
+            id_plan = None
+            if not df_planes.empty and plan_elegido != "Sin planes":
+                # Buscamos usando minúsculas
+                id_plan = int(df_planes[df_planes['nombreplan'] == plan_elegido]['idplan'].iloc[0])
             
             ejecutar_query(
                 "INSERT INTO Socios (Nombre, Apellido, DNI, IdPlan, Activo) VALUES (?,?,?,?,1)", 
                 [nombre, apellido, dni, id_plan]
             )
-            st.success("Socio guardado")
+            st.success("Socio guardado exitosamente.")
             st.rerun()
         else:
             st.error("Por favor completa los campos obligatorios.")
@@ -59,12 +75,14 @@ st.divider()
 # --- LISTADO Y GESTIÓN ---
 st.subheader("Listado Actual")
 if not df_socios.empty:
-    st.dataframe(df_socios, use_container_width=True)
+    st.dataframe(df_socios, use_container_width=True, hide_index=True)
     
-    socio_sel = st.selectbox("Seleccionar para gestionar:", df_socios.apply(lambda r: f"{r['IdSocio']} - {r['Nombre']} {r['Apellido']}", axis=1))
+    # Formateamos el selector usando las variables en minúscula y forzando idsocio a entero
+    opciones_socios = df_socios.apply(lambda r: f"{int(r['idsocio'])} - {r['nombre']} {r['apellido']}", axis=1).tolist()
+    socio_sel = st.selectbox("Seleccionar para gestionar:", opciones_socios)
     
-    if st.button("Eliminar seleccionado"):
-        id_a_borrar = socio_sel.split(" - ")[0]
+    if st.button("Eliminar seleccionado", type="primary"):
+        id_a_borrar = int(socio_sel.split(" - ")[0])
         ejecutar_query("DELETE FROM Socios WHERE IdSocio = ?", [id_a_borrar])
         st.rerun()
 else:
