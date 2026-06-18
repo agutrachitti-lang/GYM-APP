@@ -1,22 +1,27 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
 from database.conexion import get_connection
 
-st.set_page_config(page_title="Gestión de Socios", layout="wide")
-st.title("Socios del Gimnasio")
-
-# --- CONEXIÓN ---
+# --- ADAPTACIÓN PARA QUE FUNCIONE CON TU CONEXIÓN ---
 url, token = get_connection()
 
-# --- FUNCIÓN DE LECTURA (API DE TURSO) ---
-def ejecutar_query(query, params=None):
+def ejecutar_query(query, params=()):
+    # Esta función reemplaza a los 'conn.execute'
+    payload = {"statements": [{"q": query, "params": params}]}
     headers = {"Authorization": f"Bearer {token}"}
-    payload = {"statements": [{"q": query, "params": params or []}]}
     response = requests.post(f"{url}/v2/pipeline", json=payload, headers=headers)
     return response.json()
+
+def leer_tabla(query):
+    # Esta función reemplaza a los 'pd.read_sql'
+    res = ejecutar_query(query)
+    try:
+        data = res['results'][0]['response']['result']
+        # Convertimos las filas de Turso a DataFrame
+        return pd.DataFrame(data['rows'], columns=[c['name'] for c in data['cols']])
+    except:
+        return pd.DataFrame()
 
 # --- CARGAR DATOS ---
 def obtener_df():
