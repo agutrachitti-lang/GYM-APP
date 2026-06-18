@@ -102,14 +102,10 @@ with st.container(border=True):
             if ya_existe:
                 st.error("⚠️ El DNI ingresado ya pertenece a un socio registrado.")
             else:
-                # --- TU BALA DE PLATA PARA EL ID ---
-                nuevo_id = 1
-                if not df_socios.empty and pd.notna(df_socios['idsocio'].max()):
-                    nuevo_id = int(df_socios['idsocio'].max()) + 1
-
+                # --- SOLUCIÓN: DEJAMOS QUE TURSO ASIGNE EL ID AUTOINCREMENTAL ---
                 res = ejecutar_query(
-                    "INSERT INTO Socios (IdSocio, Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,?,1)", 
-                    [nuevo_id, nombre.strip().title(), apellido.strip().title(), dni_limpio, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
+                    "INSERT INTO Socios (Nombre, Apellido, DNI, IdPlan, FechaAlta, FechaVencimiento, Saldo, Activo) VALUES (?,?,?,?,?,?,?,1)", 
+                    [nombre.strip().title(), apellido.strip().title(), dni_limpio, id_plan, fecha_alta.strftime('%Y-%m-%d'), fecha_vencimiento.strftime('%Y-%m-%d'), -precio]
                 )
                 
                 str_res = str(res).lower()
@@ -160,7 +156,6 @@ if not df_socios.empty:
 
     st.write("---")
     
-    # ESCUDO ANTI "None": Si el ID está roto, le ponemos un 0 para que no explote y te deje borrarlo
     opciones_socios = df_socios.apply(
         lambda r: f"{int(r['idsocio']) if pd.notna(r['idsocio']) else 0} - {r['nombre']} {r['apellido']}", axis=1
     ).tolist()
@@ -183,7 +178,6 @@ else:
 if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not None:
     st.write("---")
     
-    # Manejamos el caso de que el ID sea 0 (los que quedaron rotos por Turso)
     if st.session_state.id_socio_a_editar == 0:
         socios_filtrados = df_socios[df_socios['idsocio'].isna()]
     else:
@@ -225,7 +219,6 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
                         if not df_planes.empty and nuevo_plan != "Sin planes":
                             nuevo_id_plan = int(df_planes[df_planes['nombreplan'] == nuevo_plan]['idplan'].iloc[0])
                         
-                        # Si el ID era 0 (roto), actualizamos buscando por DNI, sino por ID normal
                         if id_actual == 0:
                             res = ejecutar_query(
                                 "UPDATE Socios SET Nombre=?, Apellido=?, IdPlan=?, FechaVencimiento=?, Saldo=?, Activo=? WHERE DNI=?",
@@ -252,15 +245,24 @@ if st.session_state.mostrar_editor and st.session_state.id_socio_a_editar is not
         with col_d:
             with st.container(border=True):
                 st.write("🗑️ **Eliminar Socio**")
-                st.warning(f"Se eliminará a {s['nombre']} {s['apellido']} permanentemente.")
-                if st.button("Sí, Eliminar"):
-                    if id_actual == 0:
-                        res = ejecutar_query("DELETE FROM Socios WHERE DNI=?", [str(s['dni'])])
-                    else:
-                        res = ejecutar_query("DELETE FROM Socios WHERE IdSocio=?", [id_actual])
-                    
-                    st.session_state.mostrar_editor = False
-                    st.rerun()
+                
+                # --- DOBLE CHECK PARA BORRAR SOCIO ---
+                with st.popover("🗑️ Eliminar"):
+                    st.warning(f"🚨 Se eliminará a {s['nombre']} {s['apellido']} y TODO su historial de pagos permanentemente.")
+                    if st.button("Sí, Eliminar todo", type="primary"):
+                        if id_actual == 0:
+                            # 1. Borramos pagos buscando por un subquery con el DNI
+                            ejecutar_query("DELETE FROM Pagos WHERE IdSocio IN (SELECT IdSocio FROM Socios WHERE DNI=?)", [str(s['dni'])])
+                            # 2. Borramos al socio
+                            res = ejecutar_query("DELETE FROM Socios WHERE DNI=?", [str(s['dni'])])
+                        else:
+                            # 1. Borrado en cascada: Eliminamos primero los pagos para que no queden huerfanos
+                            ejecutar_query("DELETE FROM Pagos WHERE IdSocio=?", [id_actual])
+                            # 2. Borramos al socio
+                            res = ejecutar_query("DELETE FROM Socios WHERE IdSocio=?", [id_actual])
+                        
+                        st.session_state.mostrar_editor = False
+                        st.rerun()
     else:
         st.error("Socio no encontrado. Por favor, recargá la página.")
         st.session_state.mostrar_editor = False
